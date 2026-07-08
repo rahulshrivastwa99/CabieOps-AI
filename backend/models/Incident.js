@@ -8,6 +8,7 @@ const draftSchema = new mongoose.Schema({
 });
 
 const incidentSchema = new mongoose.Schema({
+    rawText: { type: String },
     type: { type: String },
     route: { type: String },
     client: { type: String },

@@ -11,34 +11,43 @@ exports.processIncident = async (req, res) => {
             return res.status(400).json({ success: false, error: "Raw text is required" });
         }
 
-        // 1. LLM Parses Text (Chaos -> Structured Data)
-        const parsedData = await parseIncidentWithLLM(rawText);
-
-        // 2. Rules Engine decides Action (Deterministic Math)
-        const routingDecision = applyBusinessRules(parsedData);
-
-        // 3. LLM Drafts Messages based on the rule engine's decision
-        const drafts = await draftMessagesWithLLM(parsedData, routingDecision);
-
-        // 4. Save everything to MongoDB
-        const newIncident = new Incident({
-            ...parsedData,
-            suggestedAction: routingDecision.suggestedAction,
-            reasoning: routingDecision.reasoning,
-            requiresHumanDecision: routingDecision.requiresHumanDecision,
-            urgencyScore: routingDecision.urgencyScore,
-            urgencyLevel: routingDecision.urgencyLevel,
-            drafts: drafts
-        });
+        // 1. LLM Parses Text (Chaos -> Structured Data Array)
+        const parsedArray = await parseIncidentWithLLM(rawText);
         
-        await newIncident.save();
+        // Ensure it's an array (just in case the LLM messes up)
+        const incidentsToProcess = Array.isArray(parsedArray) ? parsedArray : [parsedArray];
 
-        // 5. Send real-time update to React Frontend via Socket.io
-        if (req.io) {
-            req.io.emit('new_incident', newIncident);
+        const savedIncidents = [];
+
+        for (const parsedData of incidentsToProcess) {
+            // 2. Rules Engine decides Action (Deterministic Math)
+            const routingDecision = applyBusinessRules(parsedData);
+
+            // 3. LLM Drafts Messages based on the rule engine's decision
+            const drafts = await draftMessagesWithLLM(parsedData, routingDecision);
+
+            // 4. Save everything to MongoDB
+            const newIncident = new Incident({
+                rawText: rawText,
+                ...parsedData,
+                suggestedAction: routingDecision.suggestedAction,
+                reasoning: routingDecision.reasoning,
+                requiresHumanDecision: routingDecision.requiresHumanDecision,
+                urgencyScore: routingDecision.urgencyScore,
+                urgencyLevel: routingDecision.urgencyLevel,
+                drafts: drafts
+            });
+            
+            await newIncident.save();
+            savedIncidents.push(newIncident);
+
+            // 5. Send real-time update to React Frontend via Socket.io
+            if (req.io) {
+                req.io.emit('new_incident', newIncident);
+            }
         }
 
-        res.status(200).json({ success: true, data: newIncident });
+        res.status(200).json({ success: true, data: savedIncidents });
 
     } catch (error) {
         console.error("Controller Error:", error);
