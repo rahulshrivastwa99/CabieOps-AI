@@ -10,6 +10,7 @@ export type IncidentType =
 
 export interface Incident {
   id: string;
+  rawText?: string;
   type: IncidentType;
   timestamp: string; // ISO
   route: string;
