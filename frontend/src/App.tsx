@@ -64,6 +64,7 @@ export default function App() {
     data.filter(item => item.status !== 'resolved').forEach(item => {
       newIncidents.push({
         id: item._id,
+        rawText: item.rawText,
         type: item.type,
         timestamp: item.createdAt || new Date().toISOString(),
         route: item.route || 'Unknown Route',
@@ -146,8 +147,14 @@ export default function App() {
       .filter((a) => a.incidentId === selectedIncidentId)
       .map((a) => a.id);
     const filtered = drafts.filter((d) => relatedActionIds.includes(d.actionId));
-    return filtered.length ? filtered : drafts;
+    return filtered;
   }, [drafts, actions, selectedIncidentId]);
+
+  const isSelectedActionApproved = useMemo(() => {
+    if (!selectedIncidentId) return false;
+    const action = actions.find((a) => a.incidentId === selectedIncidentId);
+    return action?.status === "approved";
+  }, [actions, selectedIncidentId]);
 
   const updateBackendAction = async (id: string, status: string) => {
     try {
@@ -188,8 +195,11 @@ export default function App() {
   const handleSend = (id: string) => {
     setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, sent: true } : d)));
     const draft = drafts.find(d => d.id === id);
-    if (draft) updateBackendDraft(draft.actionId, id, { sent: true });
-    pushToast("Message sent.");
+    if (draft) {
+      updateBackendDraft(draft.actionId, id, { sent: true });
+      const audienceMap: Record<string, string> = { employees: "Waiting Employees", client: "Client HR", driver: "Backup Driver" };
+      pushToast(`WhatsApp successfully dispatched to ${audienceMap[draft.audience] || "recipient"}!`);
+    }
   };
   const handleEditDraft = (id: string, next: string) => {
     setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, message: next, edited: true } : d)));
@@ -217,9 +227,35 @@ export default function App() {
     );
   }
 
+  const handleSimulateAlert = async (text: string) => {
+    try {
+      pushToast("Ingesting situation...");
+      const res = await fetch(`${API_URL}/incidents/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawText: text })
+      });
+      const data = await res.json();
+      if (data.success) {
+        pushToast("Incident processed successfully!");
+        fetchData();
+      } else {
+        pushToast("Failed to process incident: " + data.error);
+      }
+    } catch (e) {
+      pushToast("Network error processing incident");
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    pushToast("Logged out successfully");
+  };
+
   return (
     <div className="h-full flex flex-col bg-slate-50 text-slate-800">
-      <TopBar activeIncidents={incidents.length} connection={connection} />
+      <TopBar activeIncidents={incidents.length} connection={connection} onSimulateAlert={handleSimulateAlert} onLogout={handleLogout} />
 
       <div className="lg:hidden bg-white border-b border-slate-200 px-2">
         <div className="grid grid-cols-3">
@@ -256,10 +292,16 @@ export default function App() {
               onApprove={handleApprove}
               onEdit={handleEdit}
               onEscalate={handleEscalate}
+              onExpand={setSelectedIncidentId}
             />
           </div>
           <div className={clsx("min-h-0 h-full", tab !== "drafts" && "hidden lg:block")}>
-            <DraftPanel drafts={visibleDrafts} onSend={handleSend} onEdit={handleEditDraft} />
+            <DraftPanel 
+              drafts={visibleDrafts} 
+              isActionApproved={isSelectedActionApproved}
+              onSend={handleSend} 
+              onEdit={handleEditDraft} 
+            />
           </div>
         </div>
       </main>
