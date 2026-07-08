@@ -7,9 +7,10 @@ interface Props {
   onApprove: (id: string) => void;
   onEdit: (id: string) => void;
   onEscalate: (id: string) => void;
+  onExpand: (incidentId: string) => void;
 }
 
-export function PriorityQueue({ actions, incidentsById, onApprove, onEdit, onEscalate }: Props) {
+export function PriorityQueue({ actions, incidentsById, onApprove, onEdit, onEscalate, onExpand }: Props) {
   // Rank by the linked incident's urgencyScore desc.
   const ranked = [...actions].sort((a, b) => {
     const sa = incidentsById[a.incidentId]?.urgencyScore ?? 0;
@@ -43,6 +44,7 @@ export function PriorityQueue({ actions, incidentsById, onApprove, onEdit, onEsc
               onApprove={onApprove}
               onEdit={onEdit}
               onEscalate={onEscalate}
+              onExpand={onExpand}
             />
           ))}
         </div>
